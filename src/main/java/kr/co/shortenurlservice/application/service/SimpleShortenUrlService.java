@@ -1,10 +1,12 @@
 package kr.co.shortenurlservice.application.service;
 
 import kr.co.shortenurlservice.domain.entity.ShortenUrl;
+import kr.co.shortenurlservice.domain.exception.LackOfShortUrlKeyException;
+import kr.co.shortenurlservice.domain.exception.NotFoundShortenUrlException;
 import kr.co.shortenurlservice.domain.repositoryinterface.ShortUrlRepository;
-import kr.co.shortenurlservice.presentatiln.dto.request.ShortUrlCreateRequestDto;
-import kr.co.shortenurlservice.presentatiln.dto.response.ShortUrlCreateResponseDto;
-import kr.co.shortenurlservice.presentatiln.dto.response.ShortUrlInformationDto;
+import kr.co.shortenurlservice.presentation.dto.request.ShortUrlCreateRequestDto;
+import kr.co.shortenurlservice.presentation.dto.response.ShortUrlCreateResponseDto;
+import kr.co.shortenurlservice.presentation.dto.response.ShortUrlInformationDto;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -22,7 +24,7 @@ public class SimpleShortenUrlService {
         // 기능
         // 1. 단축 url 키 생성
         String originUrl = requestDto.getOriginUrl();
-        String shortUrlKey = ShortenUrl.generateShortUrlKey();
+        String shortUrlKey = getUniqueShortenUrlKey();
 
         // 2. 원래의 url 과 단축 url 키를 통해 ShortenUrl 도메인 객체 생성
         ShortenUrl shortenUrl = new ShortenUrl(originUrl, shortUrlKey);
@@ -37,8 +39,50 @@ public class SimpleShortenUrlService {
 
     public ShortUrlInformationDto getShortenUrlInformationByShortenUrlKey(String key){
         log.info("service - getShortenUrlInformationByShortenUrlKey called....");
+
+
         ShortenUrl findShorterUrlKey = shortUrlRepository.findByShorterUrlKey(key);
+        if (findShorterUrlKey == null){
+            throw new NotFoundShortenUrlException();
+        }
+
+
         ShortUrlInformationDto shortUrlInformationDto = new ShortUrlInformationDto(findShorterUrlKey);
         return shortUrlInformationDto;
+    }
+
+    //
+    public String getOriginalUrlByShortenUrlKey(String shortenUrlKey){
+
+        ShortenUrl shortenUrl = shortUrlRepository.findByShorterUrlKey(shortenUrlKey);
+
+        if (shortenUrl == null){
+            throw new NotFoundShortenUrlException();
+        }
+
+        shortenUrl.increaseRedirectCount();
+        shortUrlRepository.urlSave(shortenUrl);
+
+        String originalUrl = shortenUrl.getOriginUrl();
+
+        return originalUrl;
+    }
+
+    //
+    private String getUniqueShortenUrlKey(){
+
+        final int MAX_RETRY_COUNT = 5;
+        int count = 0;
+
+        while (count++ < MAX_RETRY_COUNT){
+            String shortUrlKey = ShortenUrl.generateShortUrlKey();
+            ShortenUrl shortenUrl = shortUrlRepository.findByShorterUrlKey(shortUrlKey);
+
+            if (shortenUrl == null){
+                return shortUrlKey;
+            }
+        }
+
+        throw new LackOfShortUrlKeyException();
     }
 }
